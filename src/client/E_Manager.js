@@ -144,6 +144,7 @@ E_Manager.prototype.GenerateRandomObject = function()
 
 
   //Random Color, Not Important
+  mesh.geometry.mergeVertices();
   material.color = new THREE.Color(Math.random()+0.5, Math.random()+0.2, Math.random());
 
   //Add to Scene
@@ -159,7 +160,7 @@ E_Manager.prototype.GenerateRandomObject = function()
 E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 {
   //Make 10x10x10 voxel volume data
-  var segments = 30;
+  var segments = 10;
 
 
   //right scene
@@ -241,7 +242,44 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
           }
         }
       }
+    }
+  }
 
+
+//One more casting with y-dir
+  var rayDir = new THREE.Vector3(0, 1, 0);
+  for(var i=0 ; i<segments ; i++){
+    for(var j=0 ; j<segments ; j++){
+      var origin = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:0, z:j});
+      var rayCaster = new THREE.Raycaster(origin,rayDir, -rad, rad*2);
+
+      var intersects = rayCaster.intersectObjects( orScene.children );
+
+      var length = intersects.length
+      if(length > 0){
+
+        if(length%2 === 1){
+          for(var k=0 ; k<length ; k++){
+            var pos = intersects[k].point;
+            var idx = this.PositionToVoxelIdx(min, voxelSize, pos);
+            voxelSpace[idx.x][idx.y][idx.z] = 1;
+          }
+        }else{
+          for(var k=0 ; k<length ; k+=2){
+            var startPos = intersects[k].point;
+            var endPos = intersects[k+1].point;
+
+            var len = endPos.clone().sub(startPos).length();
+            var iter = Math.abs(len/voxelSize);
+
+            for(var m=0 ; m<iter ; m++){
+              var pos = startPos.add( rayDir.clone().multiplyScalar(voxelSize) )
+              var idx = this.PositionToVoxelIdx(min, voxelSize, pos);
+              voxelSpace[idx.x][idx.y][idx.z] = 1;
+            }
+          }
+        }
+      }
     }
   }
 
