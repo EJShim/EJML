@@ -3,14 +3,13 @@ function ES_SocketManager(Mgr, server)
   this.Mgr = Mgr;
   this.io = require('socket.io').listen(server, {'forceNew':true });
 
-
   //Initialize
   this.Initialize();
 }
 
 ES_SocketManager.prototype.Initialize = function()
 {
-  this.HandleSignal()
+  this.HandleSignal();
 }
 
 ES_SocketManager.prototype.HandleSignal = function()
