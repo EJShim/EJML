@@ -6,7 +6,6 @@ var E_Interactor = require('./E_Interactor.js');
 
 function E_Manager()
 {
-
   var m_socketMgr = new E_SocketManager(this);
   var m_mlMgr = new E_MLManager(this);
 
@@ -121,25 +120,25 @@ E_Manager.prototype.GenerateRandomObject = function()
 
   if( idx === 0){
     geometry = new THREE.BoxGeometry( Math.random()*5, Math.random()*5, Math.random()*5 );
-    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:30, specular:0xaaaaaa});
+    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else if(idx === 1){
-    geometry = new THREE.ConeGeometry( Math.random()*5, Math.random()*20, 32 );
-    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:30, specular:0xaaaaaa});
+    geometry = new THREE.ConeGeometry( Math.random()*5+1, Math.random()*20, 32 );
+    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else if(idx === 2){
-    var rad = Math.random()*5
-    var height = Math.random()*10;
+    var rad = Math.random()*5+1
+    var height = Math.random()*10+1;
     geometry = new THREE.CylinderGeometry( rad, rad, height, 32 );
-    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:30, specular:0xaaaaaa});
+    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else if(idx === 3){
     geometry = new THREE.TorusKnotGeometry( Math.random()*10, Math.random()*3, 100, 16 );
-    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:30, specular:0xaaaaaa});
+    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else{
     geometry = new THREE.SphereGeometry(Math.random()*5, 32, 32);
-    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:30, specular:0xaaaaaa});
+    material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }
 
@@ -176,7 +175,7 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
   /// Visualize Bounding Hexadron
   var geometry = new THREE.SphereGeometry( rad, 32, 32 );
   geometry.computeBoundingBox();
-  var material = new THREE.LineBasicMaterial( {color: 0xff0000} );
+  var material = new THREE.LineBasicMaterial( {color: 0x00ff00} );
   var sphere = new THREE.Mesh( geometry, material );
   var box = new THREE.BoxHelper(sphere, 0xffff00);
 
@@ -219,13 +218,29 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 
       var length = intersects.length
       if(length > 0){
+
+        if(length%2 === 1){
           for(var k=0 ; k<length ; k++){
             var pos = intersects[k].point;
             var idx = this.PositionToVoxelIdx(min, voxelSize, pos);
             voxelSpace[idx.x][idx.y][idx.z] = 1;
           }
-      }
+        }else{
+          for(var k=0 ; k<length ; k+=2){
+            var startPos = intersects[k].point;
+            var endPos = intersects[k+1].point;
 
+            var len = endPos.clone().sub(startPos).length();
+            var iter = Math.abs(len/voxelSize);
+
+            for(var m=0 ; m<iter ; m++){
+              var pos = startPos.add( rayDir.clone().multiplyScalar(voxelSize) )
+              var idx = this.PositionToVoxelIdx(min, voxelSize, pos);
+              voxelSpace[idx.x][idx.y][idx.z] = 1;
+            }
+          }
+        }
+      }
 
     }
   }
@@ -239,7 +254,7 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 
         if(voxelSpace[i][j][k] == 1){
           var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
-          var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0xaa0000, opacity:0.5});
+          var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
           var voxel = new THREE.Mesh(minGeometry, minMaterial);
 
           var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
