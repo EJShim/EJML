@@ -1,12 +1,22 @@
 var express = require("express");
 
+var ES_SocketManager = require("./ES_SocketManager.js");
+
+
 function ES_Manager()
 {
   //Initialize Server.set('views', __dirname + '/../views');
   this.app = express();
   this.server = null;
 
+  //initialize Managers
+  var m_socketMgr = null;
 
+  ///Set Getters
+  this.SocketMgr = function()
+  {
+    return m_socketMgr;
+  }
 
 
 
@@ -30,6 +40,12 @@ ES_Manager.prototype.Initialize = function()
   this.server.listen(port, function(){
     console.log("server opened : " + port);
   });
+
+
+
+  //Init Socket Manager
+  var socketMgr = this.SocketMgr();
+   socketMgr = new ES_SocketManager(this, this.server);
 }
 
 ES_Manager.prototype.InitRouter = function()
