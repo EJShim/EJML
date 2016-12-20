@@ -21,6 +21,7 @@
     "convnetjs": "^0.3.0",
     "ejs": "^2.5.5",
     "express": "^4.14.0",
+    "jsonfile": "^2.4.0",
     "socket.io": "^1.7.2",
     "three-trackballcontrols": "0.0.5",
     "webix": "^4.1.0"

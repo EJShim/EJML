@@ -2,6 +2,8 @@ var express = require("express");
 
 var ES_SocketManager = require("./ES_SocketManager.js");
 
+var jsonfile = require('jsonfile');
+
 
 function ES_Manager()
 {
@@ -56,4 +58,13 @@ ES_Manager.prototype.InitRouter = function()
   });
 }
 
+
+ES_Manager.prototype.SaveJson = function(path, data)
+{
+
+  jsonfile.writeFile(path, data, function (err) {
+    if(err)
+    {console.error(err)}
+  })
+}
 module.exports = ES_Manager;

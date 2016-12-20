@@ -7,7 +7,8 @@ var E_Interactor = require('./E_Interactor.js');
 function E_Manager()
 {
   var m_socketMgr = new E_SocketManager(this);
-  var m_mlMgr = new E_MLManager(this);
+  this.mlMgr = null;
+
 
   this.renderer = [];
 
@@ -16,15 +17,9 @@ function E_Manager()
     return m_socketMgr;
   }
 
-  this.MlMgr = function()
-  {
-    return m_mlMgr;
-  }
 
 
-  //Initialize clientt
-  this.Initialize();
-  this.Animate();
+
 }
 
 E_Manager.prototype.Initialize = function()
@@ -63,7 +58,17 @@ E_Manager.prototype.Initialize = function()
 
   //Generate Random Object
   this.GenerateRandomObject();
+  this.Animate();
+
 }
+
+E_Manager.prototype.OnInitialize = function(network)
+{
+  this.mlMgr = new E_MLManager(this, network);
+
+  this.Initialize();
+}
+
 
 E_Manager.prototype.UpdateWindowSize = function()
 {
@@ -115,28 +120,34 @@ E_Manager.prototype.GenerateRandomObject = function()
   var camera = this.renderer[0].camera;
 
   var idx = Math.round(Math.random() * 4);
-  var geometry, material, mesh;
+  cl = idx;
+  var geometry, material, mesh, cl;
 
 
   if( idx === 0){
+
     geometry = new THREE.BoxGeometry( Math.random()*5, Math.random()*5, Math.random()*5 );
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else if(idx === 1){
+
     geometry = new THREE.ConeGeometry( Math.random()*5+1, Math.random()*20, 32 );
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else if(idx === 2){
+
     var rad = Math.random()*5+1
     var height = Math.random()*10+1;
     geometry = new THREE.CylinderGeometry( rad, rad, height, 32 );
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else if(idx === 3){
+
     geometry = new THREE.TorusKnotGeometry( Math.random()*10, Math.random()*3, 100, 16 );
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
   }else{
+
     geometry = new THREE.SphereGeometry(Math.random()*5, 32, 32);
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
@@ -145,6 +156,12 @@ E_Manager.prototype.GenerateRandomObject = function()
 
   //Random Color, Not Important
   mesh.geometry.mergeVertices();
+  mesh.class = cl;
+
+  //Random Rotation
+  mesh.geometry.applyMatrix( new THREE.Matrix4().makeRotationX( Math.random()*Math.PI*2 ) );
+  mesh.geometry.applyMatrix( new THREE.Matrix4().makeRotationY( Math.random()*Math.PI*2 ) );
+  mesh.geometry.applyMatrix( new THREE.Matrix4().makeRotationZ( Math.random()*Math.PI*2 ) );
   material.color = new THREE.Color(Math.random()+0.5, Math.random()+0.2, Math.random());
 
   //Add to Scene
@@ -160,7 +177,7 @@ E_Manager.prototype.GenerateRandomObject = function()
 E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 {
   //Make 10x10x10 voxel volume data
-  var segments = 10;
+  var segments = 20;
 
 
   //right scene
@@ -248,25 +265,29 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 
 
 
-  ////Visualize Voxels
-  for(var i=0 ; i<segments ; i++){
-    for(var j=0 ; j<segments ; j++){
-      for(var k=0 ; k<segments ; k++){
+  // ////Visualize Voxels
+  // for(var i=0 ; i<segments ; i++){
+  //   for(var j=0 ; j<segments ; j++){
+  //     for(var k=0 ; k<segments ; k++){
+  //
+  //       if(voxelSpace[i][j][k] == 1){
+  //         var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+  //         var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
+  //         var voxel = new THREE.Mesh(minGeometry, minMaterial);
+  //
+  //         var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
+  //         voxel.position.set( pos.x, pos.y, pos.z );
+  //         scene.add(voxel);
+  //       }
+  //     }
+  //   }
+  // }
+  //
+  // scene.add( box );
 
-        if(voxelSpace[i][j][k] == 1){
-          var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
-          var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
-          var voxel = new THREE.Mesh(minGeometry, minMaterial);
 
-          var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
-          voxel.position.set( pos.x, pos.y, pos.z );
-          scene.add(voxel);
-        }
-      }
-    }
-  }
 
-  scene.add( box );
+  this.mlMgr.PutVolume({data:voxelSpace, class:mesh.class});
 }
 
 E_Manager.prototype.PositionToVoxelIdx = function(min, voxelSize, position)
@@ -296,7 +317,34 @@ E_Manager.prototype.Frand = function(min, max)
   value += min;
 
   return value;
+}
 
+E_Manager.prototype.ClearScene = function()
+{
+
+  var scene0 = this.renderer[0].scene;
+  var length0 = scene0.children.length;
+
+  for(var j=length0-1 ; j>=0; j--){
+    if(scene0.children[j] instanceof THREE.Mesh)
+    {
+      scene0.remove( scene0.children[j] );
+    }
+  }
+
+  //
+  //
+  // var scene = this.renderer[1].scene;
+  // var length = scene.children.length;
+  // for(var i=0 ; i<length ; i++){
+  //   scene.remove(scene.children[0]);
+  // }
+
+
+
+  //this.Redraw();
+
+  this.GenerateRandomObject();
 
 }
 
