@@ -43509,6 +43509,7 @@ E_MLManager.prototype.Initialize = function()
 
 E_MLManager.prototype.PutVolume = function( volume )
 {
+  var className = ["Box", "Cone", "Cylinder", "TorusKnot", "Sphere"];
   var length = volume.data.length;
   var convVol = new convnetjs.Vol(length, length, length, 0.0);
 
@@ -43522,34 +43523,39 @@ E_MLManager.prototype.PutVolume = function( volume )
     }
   }
 
-  ///Show Probability
-  switch (volume.class) {
-    case 0:
-      console.log("This is a Box");
-    break;
-    case 1:
-      console.log("This is a Cone");
-    break;
-    case 2:
-      console.log("This is a Cylinder");
-    break;
-    case 3:
-      console.log("This is a TorusKnot");
-    break;
-    case 4:
-      console.log("This is a Sphere");
-    break;
+  this.Mgr.SetLog("<b style='color:red'>Input :" + className[volume.class] + "</b><br>");
 
-    default:
+  //Calculate Possibility
+  var probability = this.network.forward(convVol);
 
+
+  //Get The Maximum
+  var max = 0;
+  var maxIdx = 0;
+
+  for(var i=0 ; i<5 ; i++){
+    if(probability.w[i] > max){
+      max = probability.w[i];
+      maxIdx = i;
+    }
   }
 
-  var probability = this.network.forward(convVol);
-  console.log("Box : " + probability.w[0]);
-  console.log("Cone : " + probability.w[1]);
-  console.log("Cylinder : " + probability.w[2]);
-  console.log("TorusKnot " + probability.w[3]);
-  console.log("Sphere : " + probability.w[4]);
+  //Show Probability
+  for(var i=0 ; i<5 ; i++){
+    var prob = probability.w[i] * 100
+    this.Mgr.AppendLog("<br>");
+
+    if(i === maxIdx){
+        this.Mgr.AppendLog("<b>" + className[i] + " : " + prob.toFixed(4) + " %</b>");
+    }else{
+      this.Mgr.AppendLog(className[i] + " : " + prob.toFixed(4) + " %");
+    }
+  }
+
+  //Max Class Name
+  this.Mgr.AppendLog("<br><br>");
+  this.Mgr.AppendLog("<b style='color:blue'> Predicted : " + className[maxIdx] + "</b>")
+
 
 
   //Train Data
@@ -43585,12 +43591,15 @@ function E_Manager()
   }
 
 
-
+  this.m_bRunTrainning = true;
 
 }
 
 E_Manager.prototype.Initialize = function()
 {
+  $$("ID_LOG").getNode().style.marginLeft = "50px";
+
+
   //Initialzie Render Window
   var renWin = [];
   renWin[0] = $$("ID_VIEW_LEFT");
@@ -43782,16 +43791,6 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
   var min = geometry.boundingBox.min;
 
 
-  ///Find Where Voxel Should be Placed *** Should Be modified Later
-  // var vertArr = mesh.geometry.vertices;
-  // var numVertex = vertArr.length;
-  // for(var i=0 ; i<numVertex ; i++){
-  //   var pos = vertArr[i];
-  //   var idx = this.PositionToVoxelIdx(min, voxelSize, pos);
-  //   voxelSpace[idx.x][idx.y][idx.z] = 1;
-  // }
-
-
   ///Find Where Voxel Should Be Placed = Using Raycaster
   var rayDir = new THREE.Vector3(0, 0, 1);
   for(var i=0 ; i<segments ; i++){
@@ -43831,30 +43830,39 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 
 
 
+  //Visualize voxelSpace
+  this.VisualizeVoxels(box, voxelSpace, segments, voxelSize, min, scene);
 
-  // ////Visualize Voxels
-  // for(var i=0 ; i<segments ; i++){
-  //   for(var j=0 ; j<segments ; j++){
-  //     for(var k=0 ; k<segments ; k++){
-  //
-  //       if(voxelSpace[i][j][k] == 1){
-  //         var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
-  //         var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
-  //         var voxel = new THREE.Mesh(minGeometry, minMaterial);
-  //
-  //         var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
-  //         voxel.position.set( pos.x, pos.y, pos.z );
-  //         scene.add(voxel);
-  //       }
-  //     }
-  //   }
-  // }
-  //
-  // scene.add( box );
+
 
 
 
   this.mlMgr.PutVolume({data:voxelSpace, class:mesh.class});
+}
+
+E_Manager.prototype.VisualizeVoxels = function(box, voxelSpace, segments, voxelSize, min, scene)
+{
+  if(this.m_bRunTrainning) {return};
+
+  ////Visualize Voxels
+  for(var i=0 ; i<segments ; i++){
+    for(var j=0 ; j<segments ; j++){
+      for(var k=0 ; k<segments ; k++){
+
+        if(voxelSpace[i][j][k] == 1){
+          var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+          var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
+          var voxel = new THREE.Mesh(minGeometry, minMaterial);
+
+          var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
+          voxel.position.set( pos.x, pos.y, pos.z );
+          scene.add(voxel);
+        }
+      }
+    }
+  }
+
+  scene.add( box );
 }
 
 E_Manager.prototype.PositionToVoxelIdx = function(min, voxelSize, position)
@@ -43899,20 +43907,26 @@ E_Manager.prototype.ClearScene = function()
     }
   }
 
-  //
-  //
-  // var scene = this.renderer[1].scene;
-  // var length = scene.children.length;
-  // for(var i=0 ; i<length ; i++){
-  //   scene.remove(scene.children[0]);
-  // }
-
-
+  var scene = this.renderer[1].scene;
+  var length = scene.children.length;
+  for(var i=0 ; i<length ; i++){
+    scene.remove(scene.children[0]);
+  }
 
   //this.Redraw();
 
   this.GenerateRandomObject();
 
+}
+
+E_Manager.prototype.SetLog = function(text)
+{
+  $$("ID_LOG").getNode().innerHTML = text
+}
+
+E_Manager.prototype.AppendLog = function(text)
+{
+  $$("ID_LOG").getNode().innerHTML += text;
 }
 
 module.exports = E_Manager;
@@ -43944,9 +43958,11 @@ E_SocketManager.prototype.HandleSignal = function()
 
   socket.on("SIGNAL_RESTART", function(data){
     //clear scene
-    Mgr.ClearScene();
+    if(Mgr.m_bRunTrainning){
+      Mgr.ClearScene();
+    }
 
-    //RE-generate
+    
   })
 
 }
@@ -43969,11 +43985,11 @@ var E_Manager = require('./E_Manager.js');
 var l_toolBar = {view:"toolbar",
                 elements:[
                   //Toggle Run Random Learning
-                  {id:"ID_GENERATE_LEARNING", view:"button",  value:"RANDOM LEARNING", width:100},
+                  {id:"ID_RUN_TRAINNING", view:"button",  value:"Run Trainning", width:100},
 
 
                   //Generate Random Object and run classification
-                  {id:"ID_GENERATE_CLASSIFY", view:"button", value:"Classification", width:100}
+                  {id:"ID_REFRESH", view:"button", value:"Classification(Random)", width:100}
                 ]};
 
 
@@ -43982,6 +43998,9 @@ var l_leftMenu = {id:"ID_VIEW_LEFT", view:"template"};
 
 //Right Viewport : Visuzlize Voxelized Mesh
 var l_rightMenu = {id:"ID_VIEW_RIGHT", view:"template"};
+
+//Log Menuv
+var l_logMenu = {id:"ID_LOG", view:"template", gravity:0.3};
 
 var layout = new webix.ui({
   rows:[
@@ -43992,7 +44011,9 @@ var layout = new webix.ui({
         {view:"resizer"},
         l_rightMenu
       ]
-    }
+    },
+    {view:"resizer"},
+    l_logMenu
   ]
 })
 
@@ -44003,6 +44024,11 @@ var Manager = new E_Manager();
 
 
 ///IO event
+window.addEventListener("resize", function(){
+  Manager.UpdateWindowSize();
+  Manager.Redraw();
+});
+
 $$("ID_VIEW_LEFT").attachEvent("onViewResize", function(){
   Manager.UpdateWindowSize();
   Manager.Redraw();
@@ -44011,6 +44037,19 @@ $$("ID_VIEW_LEFT").attachEvent("onViewResize", function(){
 $$("ID_VIEW_RIGHT").attachEvent("onViewResize", function(){
   Manager.UpdateWindowSize();
   Manager.Redraw();
+});
+
+$$("ID_LOG").attachEvent("onViewResize", function(){
+  Manager.UpdateWindowSize();
+  Manager.Redraw();
+});
+
+
+
+///button
+$$("ID_REFRESH").attachEvent("onItemClick", function(id){
+  //this.select(id);
+  Manager.ClearScene();
 });
 
 },{"./E_Manager.js":6}]},{},[8]);

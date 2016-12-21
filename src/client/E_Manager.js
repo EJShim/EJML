@@ -18,12 +18,15 @@ function E_Manager()
   }
 
 
-
+  this.m_bRunTrainning = true;
 
 }
 
 E_Manager.prototype.Initialize = function()
 {
+  $$("ID_LOG").getNode().style.marginLeft = "50px";
+
+
   //Initialzie Render Window
   var renWin = [];
   renWin[0] = $$("ID_VIEW_LEFT");
@@ -215,16 +218,6 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
   var min = geometry.boundingBox.min;
 
 
-  ///Find Where Voxel Should be Placed *** Should Be modified Later
-  // var vertArr = mesh.geometry.vertices;
-  // var numVertex = vertArr.length;
-  // for(var i=0 ; i<numVertex ; i++){
-  //   var pos = vertArr[i];
-  //   var idx = this.PositionToVoxelIdx(min, voxelSize, pos);
-  //   voxelSpace[idx.x][idx.y][idx.z] = 1;
-  // }
-
-
   ///Find Where Voxel Should Be Placed = Using Raycaster
   var rayDir = new THREE.Vector3(0, 0, 1);
   for(var i=0 ; i<segments ; i++){
@@ -264,30 +257,39 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 
 
 
+  //Visualize voxelSpace
+  this.VisualizeVoxels(box, voxelSpace, segments, voxelSize, min, scene);
 
-  // ////Visualize Voxels
-  // for(var i=0 ; i<segments ; i++){
-  //   for(var j=0 ; j<segments ; j++){
-  //     for(var k=0 ; k<segments ; k++){
-  //
-  //       if(voxelSpace[i][j][k] == 1){
-  //         var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
-  //         var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
-  //         var voxel = new THREE.Mesh(minGeometry, minMaterial);
-  //
-  //         var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
-  //         voxel.position.set( pos.x, pos.y, pos.z );
-  //         scene.add(voxel);
-  //       }
-  //     }
-  //   }
-  // }
-  //
-  // scene.add( box );
+
 
 
 
   this.mlMgr.PutVolume({data:voxelSpace, class:mesh.class});
+}
+
+E_Manager.prototype.VisualizeVoxels = function(box, voxelSpace, segments, voxelSize, min, scene)
+{
+  if(this.m_bRunTrainning) {return};
+
+  ////Visualize Voxels
+  for(var i=0 ; i<segments ; i++){
+    for(var j=0 ; j<segments ; j++){
+      for(var k=0 ; k<segments ; k++){
+
+        if(voxelSpace[i][j][k] == 1){
+          var minGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+          var minMaterial = new THREE.MeshBasicMaterial({transparent:true, color:0x00aa00, opacity:0.3});
+          var voxel = new THREE.Mesh(minGeometry, minMaterial);
+
+          var pos = this.VoxelIdxToPosition(min, voxelSize, {x:i, y:j, z:k});
+          voxel.position.set( pos.x, pos.y, pos.z );
+          scene.add(voxel);
+        }
+      }
+    }
+  }
+
+  scene.add( box );
 }
 
 E_Manager.prototype.PositionToVoxelIdx = function(min, voxelSize, position)
@@ -332,20 +334,26 @@ E_Manager.prototype.ClearScene = function()
     }
   }
 
-  //
-  //
-  // var scene = this.renderer[1].scene;
-  // var length = scene.children.length;
-  // for(var i=0 ; i<length ; i++){
-  //   scene.remove(scene.children[0]);
-  // }
-
-
+  var scene = this.renderer[1].scene;
+  var length = scene.children.length;
+  for(var i=0 ; i<length ; i++){
+    scene.remove(scene.children[0]);
+  }
 
   //this.Redraw();
 
   this.GenerateRandomObject();
 
+}
+
+E_Manager.prototype.SetLog = function(text)
+{
+  $$("ID_LOG").getNode().innerHTML = text
+}
+
+E_Manager.prototype.AppendLog = function(text)
+{
+  $$("ID_LOG").getNode().innerHTML += text;
 }
 
 module.exports = E_Manager;

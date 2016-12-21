@@ -31,6 +31,7 @@ E_MLManager.prototype.Initialize = function()
 
 E_MLManager.prototype.PutVolume = function( volume )
 {
+  var className = ["Box", "Cone", "Cylinder", "TorusKnot", "Sphere"];
   var length = volume.data.length;
   var convVol = new convnetjs.Vol(length, length, length, 0.0);
 
@@ -44,34 +45,39 @@ E_MLManager.prototype.PutVolume = function( volume )
     }
   }
 
-  ///Show Probability
-  switch (volume.class) {
-    case 0:
-      console.log("This is a Box");
-    break;
-    case 1:
-      console.log("This is a Cone");
-    break;
-    case 2:
-      console.log("This is a Cylinder");
-    break;
-    case 3:
-      console.log("This is a TorusKnot");
-    break;
-    case 4:
-      console.log("This is a Sphere");
-    break;
+  this.Mgr.SetLog("<b style='color:red'>Input :" + className[volume.class] + "</b><br>");
 
-    default:
+  //Calculate Possibility
+  var probability = this.network.forward(convVol);
 
+
+  //Get The Maximum
+  var max = 0;
+  var maxIdx = 0;
+
+  for(var i=0 ; i<5 ; i++){
+    if(probability.w[i] > max){
+      max = probability.w[i];
+      maxIdx = i;
+    }
   }
 
-  var probability = this.network.forward(convVol);
-  console.log("Box : " + probability.w[0]);
-  console.log("Cone : " + probability.w[1]);
-  console.log("Cylinder : " + probability.w[2]);
-  console.log("TorusKnot " + probability.w[3]);
-  console.log("Sphere : " + probability.w[4]);
+  //Show Probability
+  for(var i=0 ; i<5 ; i++){
+    var prob = probability.w[i] * 100
+    this.Mgr.AppendLog("<br>");
+
+    if(i === maxIdx){
+        this.Mgr.AppendLog("<b>" + className[i] + " : " + prob.toFixed(4) + " %</b>");
+    }else{
+      this.Mgr.AppendLog(className[i] + " : " + prob.toFixed(4) + " %");
+    }
+  }
+
+  //Max Class Name
+  this.Mgr.AppendLog("<br><br>");
+  this.Mgr.AppendLog("<b style='color:blue'> Predicted : " + className[maxIdx] + "</b>")
+
 
 
   //Train Data
