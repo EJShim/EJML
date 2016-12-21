@@ -43591,13 +43591,14 @@ function E_Manager()
   }
 
 
-  this.m_bRunTrainning = true;
+  this.m_bRunTrainning = false;
 
 }
 
 E_Manager.prototype.Initialize = function()
 {
   $$("ID_LOG").getNode().style.marginLeft = "50px";
+  $$("ID_LOG").getNode().style.marginTop = "15px";
 
 
   //Initialzie Render Window
@@ -43929,6 +43930,16 @@ E_Manager.prototype.AppendLog = function(text)
   $$("ID_LOG").getNode().innerHTML += text;
 }
 
+E_Manager.prototype.OnRunTrainning = function(value)
+{
+  if(value === 1){
+    this.m_bRunTrainning = true;
+    this.ClearScene();
+  }else{
+    this.m_bRunTrainning = false;
+  }
+}
+
 module.exports = E_Manager;
 
 },{"./E_Interactor.js":4,"./E_MLManager.js":5,"./E_SocketManager.js":7}],7:[function(require,module,exports){
@@ -43985,11 +43996,14 @@ var E_Manager = require('./E_Manager.js');
 var l_toolBar = {view:"toolbar",
                 elements:[
                   //Toggle Run Random Learning
-                  {id:"ID_RUN_TRAINNING", view:"button",  value:"Run Trainning", width:100},
+                  { id:"ID_TOGGLE_TRAINNING",view:"toggle", type:"iconButton", name:"s4", width:150,
+                      offIcon:"play",  onIcon:"pause",
+                      offLabel:"Run Trainning", onLabel:"Stop Trainning"
+                  },
 
 
                   //Generate Random Object and run classification
-                  {id:"ID_REFRESH", view:"button", value:"Classification(Random)", width:100}
+                  {id:"ID_REFRESH", view:"button", value:"Generate Random Polygon", width:250}
                 ]};
 
 
@@ -44050,6 +44064,10 @@ $$("ID_LOG").attachEvent("onViewResize", function(){
 $$("ID_REFRESH").attachEvent("onItemClick", function(id){
   //this.select(id);
   Manager.ClearScene();
+});
+
+$$("ID_TOGGLE_TRAINNING").attachEvent("onItemClick", function(id){
+  Manager.OnRunTrainning(this.getValue());
 });
 
 },{"./E_Manager.js":6}]},{},[8]);

@@ -8,11 +8,14 @@ var E_Manager = require('./E_Manager.js');
 var l_toolBar = {view:"toolbar",
                 elements:[
                   //Toggle Run Random Learning
-                  {id:"ID_RUN_TRAINNING", view:"button",  value:"Run Trainning", width:100},
+                  { id:"ID_TOGGLE_TRAINNING",view:"toggle", type:"iconButton", name:"s4", width:150,
+                      offIcon:"play",  onIcon:"pause",
+                      offLabel:"Run Trainning", onLabel:"Stop Trainning"
+                  },
 
 
                   //Generate Random Object and run classification
-                  {id:"ID_REFRESH", view:"button", value:"Classification(Random)", width:100}
+                  {id:"ID_REFRESH", view:"button", value:"Generate Random Polygon", width:250}
                 ]};
 
 
@@ -73,4 +76,8 @@ $$("ID_LOG").attachEvent("onViewResize", function(){
 $$("ID_REFRESH").attachEvent("onItemClick", function(id){
   //this.select(id);
   Manager.ClearScene();
+});
+
+$$("ID_TOGGLE_TRAINNING").attachEvent("onItemClick", function(id){
+  Manager.OnRunTrainning(this.getValue());
 });

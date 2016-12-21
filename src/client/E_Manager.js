@@ -18,13 +18,14 @@ function E_Manager()
   }
 
 
-  this.m_bRunTrainning = true;
+  this.m_bRunTrainning = false;
 
 }
 
 E_Manager.prototype.Initialize = function()
 {
   $$("ID_LOG").getNode().style.marginLeft = "50px";
+  $$("ID_LOG").getNode().style.marginTop = "15px";
 
 
   //Initialzie Render Window
@@ -354,6 +355,16 @@ E_Manager.prototype.SetLog = function(text)
 E_Manager.prototype.AppendLog = function(text)
 {
   $$("ID_LOG").getNode().innerHTML += text;
+}
+
+E_Manager.prototype.OnRunTrainning = function(value)
+{
+  if(value === 1){
+    this.m_bRunTrainning = true;
+    this.ClearScene();
+  }else{
+    this.m_bRunTrainning = false;
+  }
 }
 
 module.exports = E_Manager;
