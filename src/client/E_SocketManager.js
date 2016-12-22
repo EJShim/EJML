@@ -28,7 +28,7 @@ E_SocketManager.prototype.HandleSignal = function()
       Mgr.ClearScene();
     }
 
-    
+
   })
 
 }

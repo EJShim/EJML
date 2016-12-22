@@ -4,6 +4,9 @@ var E_MLManager = require('./E_MLManager.js');
 //Interactor
 var E_Interactor = require('./E_Interactor.js');
 
+
+//STL Loader
+var STLLoader = require('three-stl-loader')(THREE);
 function E_Manager()
 {
   var m_socketMgr = new E_SocketManager(this);
@@ -129,7 +132,6 @@ E_Manager.prototype.GenerateRandomObject = function()
 
 
   if( idx === 0){
-
     geometry = new THREE.BoxGeometry( Math.random()*5, Math.random()*5, Math.random()*5 );
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
@@ -174,15 +176,13 @@ E_Manager.prototype.GenerateRandomObject = function()
 
   //Redraw Scene
   this.GenerateVoxelizedObject(mesh);
-
   this.Redraw();
 }
 
 E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 {
-  //Make 10x10x10 voxel volume data
+  //Make 20x20x20 voxel volume data
   var segments = 20;
-
 
   //right scene
   var orScene = this.renderer[0].scene;
@@ -192,10 +192,13 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
   mesh.geometry.computeBoundingSphere();
   var rad = mesh.geometry.boundingSphere.radius;
   var center = mesh.geometry.boundingSphere.center;
+
+  this.renderer[0].control.target = center;
   var voxelSize = (rad * 2) / segments;
 
   /// Visualize Bounding Hexadron
   var geometry = new THREE.SphereGeometry( rad, 32, 32 );
+  geometry.applyMatrix( new THREE.Matrix4().makeTranslation(center.x, center.y, center.z) );
   geometry.computeBoundingBox();
   var material = new THREE.LineBasicMaterial( {color: 0x00ff00} );
   var sphere = new THREE.Mesh( geometry, material );
@@ -256,16 +259,12 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
     }
   }
 
-
-
   //Visualize voxelSpace
   this.VisualizeVoxels(box, voxelSpace, segments, voxelSize, min, scene);
 
 
-
-
-
   this.mlMgr.PutVolume({data:voxelSpace, class:mesh.class});
+
 }
 
 E_Manager.prototype.VisualizeVoxels = function(box, voxelSpace, segments, voxelSize, min, scene)
@@ -322,8 +321,9 @@ E_Manager.prototype.Frand = function(min, max)
   return value;
 }
 
-E_Manager.prototype.ClearScene = function()
+E_Manager.prototype.ClearScene = function( generateNext )
 {
+  if(generateNext === undefined) generateNext = true;
 
   var scene0 = this.renderer[0].scene;
   var length0 = scene0.children.length;
@@ -342,9 +342,9 @@ E_Manager.prototype.ClearScene = function()
   }
 
   //this.Redraw();
-
-  this.GenerateRandomObject();
-
+  if(generateNext){
+    this.GenerateRandomObject();
+  }
 }
 
 E_Manager.prototype.SetLog = function(text)
@@ -365,6 +365,50 @@ E_Manager.prototype.OnRunTrainning = function(value)
   }else{
     this.m_bRunTrainning = false;
   }
+}
+
+E_Manager.prototype.ImportMesh = function(path)
+{
+  var that = this;
+  var scene = this.renderer[0].scene;
+
+  var loader = new THREE.OBJLoader();
+  loader.load( path, function ( object ) {
+    that.ClearScene(false);
+
+    var mesh = object.children[0];
+    mesh.material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
+    mesh.material.color = new THREE.Color(Math.random(), Math.random(), Math.random());
+
+    scene.add( mesh );
+    mesh.class = null;
+    that.GenerateVoxelizedObject(mesh);
+    that.Redraw();
+  } );
+}
+
+E_Manager.prototype.ImportSTL = function(path)
+{
+  var that = this;
+  var scene = this.renderer[0].scene;
+
+
+  var loader = new STLLoader();
+
+  loader.load( path, function(geometry){
+    //clear Scene
+    that.ClearScene(false);
+
+
+    var material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
+    material.color = new THREE.Color(Math.random(), Math.random(), Math.random());
+    var mesh = new THREE.Mesh(geometry, material);
+
+    scene.add(mesh);
+    mesh.class = null;
+    that.GenerateVoxelizedObject(mesh);
+    that.Redraw();
+  } );
 }
 
 module.exports = E_Manager;

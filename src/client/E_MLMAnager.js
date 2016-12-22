@@ -45,7 +45,11 @@ E_MLManager.prototype.PutVolume = function( volume )
     }
   }
 
-  this.Mgr.SetLog("<b style='color:red'>Input :" + className[volume.class] + "</b><br>");
+  if(volume.class === null){
+    this.Mgr.SetLog("<b style='color:red'> Unknown Input </b><br>");
+  }else{
+    this.Mgr.SetLog("<b style='color:red'>Input :" + className[volume.class] + "</b><br>");
+  }
 
   //Calculate Possibility
   var probability = this.network.forward(convVol);
@@ -81,13 +85,14 @@ E_MLManager.prototype.PutVolume = function( volume )
 
 
   //Train Data
-  var trainer = new convnetjs.Trainer(this.network, {learning_rate:0.01, l2_decay:0.001});
-  trainer.train(convVol, volume.class);
+  if(volume.class !== null){
+    var trainer = new convnetjs.Trainer(this.network, {learning_rate:0.01, l2_decay:0.001});
+    trainer.train(convVol, volume.class);
 
-
-  ///Save Network
-  var jsonNetwork = JSON.stringify( this.network.toJSON() );
-  this.Mgr.SocketMgr().EmitData("SAVE_NETWORK", jsonNetwork);
+    ///Save Network
+    var jsonNetwork = JSON.stringify( this.network.toJSON() );
+    this.Mgr.SocketMgr().EmitData("SAVE_NETWORK", jsonNetwork);
+  }
 }
 
 module.exports = E_MLManager;

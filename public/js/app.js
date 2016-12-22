@@ -2200,6 +2200,504 @@ var convnetjs = convnetjs || { REVISION: 'ALPHA' };
 
 },{}],2:[function(require,module,exports){
 /**
+ * @author aleeper / http://adamleeper.com/
+ * @author mrdoob / http://mrdoob.com/
+ * @author gero3 / https://github.com/gero3
+ *
+ * Description: A THREE loader for STL ASCII files, as created by Solidworks and other CAD programs.
+ *
+ * Supports both binary and ASCII encoded files, with automatic detection of type.
+ *
+ * Limitations:
+ *  Binary decoding supports "Magics" color format (http://en.wikipedia.org/wiki/STL_(file_format)#Color_in_binary_STL).
+ *  There is perhaps some question as to how valid it is to always assume little-endian-ness.
+ *  ASCII decoding assumes file is UTF-8. Seems to work for the examples...
+ *
+ * Usage:
+ *  var loader = new STLLoader();
+ *  loader.load( './models/stl/slotted_disk.stl', function ( geometry ) {
+ *    scene.add( new THREE.Mesh( geometry ) );
+ *  });
+ *
+ * For binary STLs geometry might contain colors for vertices. To use it:
+ *  // use the same code to load STL as above
+ *  if (geometry.hasColors) {
+ *    material = new THREE.MeshPhongMaterial({ opacity: geometry.alpha, vertexColors: THREE.VertexColors });
+ *  } else { .... }
+ *  var mesh = new THREE.Mesh( geometry, material );
+ */
+
+ module.exports = function (THREE) {
+
+   var STLLoader = function ( manager ) {
+
+   	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
+
+   };
+
+   STLLoader.prototype = {
+
+   	constructor: STLLoader,
+
+   	load: function ( url, onLoad, onProgress, onError ) {
+
+   		var scope = this;
+
+   		var loader = new THREE.XHRLoader( scope.manager );
+   		loader.setResponseType( 'arraybuffer' );
+   		loader.load( url, function ( text ) {
+
+   			onLoad( scope.parse( text ) );
+
+   		}, onProgress, onError );
+
+   	},
+
+   	parse: function ( data ) {
+
+   		var isBinary = function () {
+
+   			var expect, face_size, n_faces, reader;
+   			reader = new DataView( binData );
+   			face_size = ( 32 / 8 * 3 ) + ( ( 32 / 8 * 3 ) * 3 ) + ( 16 / 8 );
+   			n_faces = reader.getUint32( 80, true );
+   			expect = 80 + ( 32 / 8 ) + ( n_faces * face_size );
+
+   			if ( expect === reader.byteLength ) {
+
+   				return true;
+
+   			}
+
+   			// some binary files will have different size from expected,
+   			// checking characters higher than ASCII to confirm is binary
+   			var fileLength = reader.byteLength;
+   			for ( var index = 0; index < fileLength; index ++ ) {
+
+   				if ( reader.getUint8( index, false ) > 127 ) {
+
+   					return true;
+
+   				}
+
+   			}
+
+   			return false;
+
+   		};
+
+   		var binData = this.ensureBinary( data );
+
+   		return isBinary()
+   			? this.parseBinary( binData )
+   			: this.parseASCII( this.ensureString( data ) );
+
+   	},
+
+   	parseBinary: function ( data ) {
+
+   		var reader = new DataView( data );
+   		var faces = reader.getUint32( 80, true );
+
+   		var r, g, b, hasColors = false, colors;
+   		var defaultR, defaultG, defaultB, alpha;
+
+   		// process STL header
+   		// check for default color in header ("COLOR=rgba" sequence).
+
+   		for ( var index = 0; index < 80 - 10; index ++ ) {
+
+   			if ( ( reader.getUint32( index, false ) == 0x434F4C4F /*COLO*/ ) &&
+   				( reader.getUint8( index + 4 ) == 0x52 /*'R'*/ ) &&
+   				( reader.getUint8( index + 5 ) == 0x3D /*'='*/ ) ) {
+
+   				hasColors = true;
+   				colors = new Float32Array( faces * 3 * 3 );
+
+   				defaultR = reader.getUint8( index + 6 ) / 255;
+   				defaultG = reader.getUint8( index + 7 ) / 255;
+   				defaultB = reader.getUint8( index + 8 ) / 255;
+   				alpha = reader.getUint8( index + 9 ) / 255;
+
+   			}
+
+   		}
+
+   		var dataOffset = 84;
+   		var faceLength = 12 * 4 + 2;
+
+   		var offset = 0;
+
+   		var geometry = new THREE.BufferGeometry();
+
+   		var vertices = new Float32Array( faces * 3 * 3 );
+   		var normals = new Float32Array( faces * 3 * 3 );
+
+   		for ( var face = 0; face < faces; face ++ ) {
+
+   			var start = dataOffset + face * faceLength;
+   			var normalX = reader.getFloat32( start, true );
+   			var normalY = reader.getFloat32( start + 4, true );
+   			var normalZ = reader.getFloat32( start + 8, true );
+
+   			if ( hasColors ) {
+
+   				var packedColor = reader.getUint16( start + 48, true );
+
+   				if ( ( packedColor & 0x8000 ) === 0 ) {
+
+   					// facet has its own unique color
+
+   					r = ( packedColor & 0x1F ) / 31;
+   					g = ( ( packedColor >> 5 ) & 0x1F ) / 31;
+   					b = ( ( packedColor >> 10 ) & 0x1F ) / 31;
+
+   				} else {
+
+   					r = defaultR;
+   					g = defaultG;
+   					b = defaultB;
+
+   				}
+
+   			}
+
+   			for ( var i = 1; i <= 3; i ++ ) {
+
+   				var vertexstart = start + i * 12;
+
+   				vertices[ offset ] = reader.getFloat32( vertexstart, true );
+   				vertices[ offset + 1 ] = reader.getFloat32( vertexstart + 4, true );
+   				vertices[ offset + 2 ] = reader.getFloat32( vertexstart + 8, true );
+
+   				normals[ offset ] = normalX;
+   				normals[ offset + 1 ] = normalY;
+   				normals[ offset + 2 ] = normalZ;
+
+   				if ( hasColors ) {
+
+   					colors[ offset ] = r;
+   					colors[ offset + 1 ] = g;
+   					colors[ offset + 2 ] = b;
+
+   				}
+
+   				offset += 3;
+
+   			}
+
+   		}
+
+   		geometry.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+   		geometry.addAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+
+   		if ( hasColors ) {
+
+   			geometry.addAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+   			geometry.hasColors = true;
+   			geometry.alpha = alpha;
+
+   		}
+
+   		return geometry;
+
+   	},
+
+   	parseASCII: function ( data ) {
+
+   		var geometry, length, normal, patternFace, patternNormal, patternVertex, result, text;
+   		geometry = new THREE.Geometry();
+   		patternFace = /facet([\s\S]*?)endfacet/g;
+
+   		while ( ( result = patternFace.exec( data ) ) !== null ) {
+
+   			text = result[ 0 ];
+   			patternNormal = /normal[\s]+([\-+]?[0-9]+\.?[0-9]*([eE][\-+]?[0-9]+)?)+[\s]+([\-+]?[0-9]*\.?[0-9]+([eE][\-+]?[0-9]+)?)+[\s]+([\-+]?[0-9]*\.?[0-9]+([eE][\-+]?[0-9]+)?)+/g;
+
+   			while ( ( result = patternNormal.exec( text ) ) !== null ) {
+
+   				normal = new THREE.Vector3( parseFloat( result[ 1 ] ), parseFloat( result[ 3 ] ), parseFloat( result[ 5 ] ) );
+
+   			}
+
+   			patternVertex = /vertex[\s]+([\-+]?[0-9]+\.?[0-9]*([eE][\-+]?[0-9]+)?)+[\s]+([\-+]?[0-9]*\.?[0-9]+([eE][\-+]?[0-9]+)?)+[\s]+([\-+]?[0-9]*\.?[0-9]+([eE][\-+]?[0-9]+)?)+/g;
+
+   			while ( ( result = patternVertex.exec( text ) ) !== null ) {
+
+   				geometry.vertices.push( new THREE.Vector3( parseFloat( result[ 1 ] ), parseFloat( result[ 3 ] ), parseFloat( result[ 5 ] ) ) );
+
+   			}
+
+   			length = geometry.vertices.length;
+
+   			geometry.faces.push( new THREE.Face3( length - 3, length - 2, length - 1, normal ) );
+
+   		}
+
+   		geometry.computeBoundingBox();
+   		geometry.computeBoundingSphere();
+
+   		return geometry;
+
+   	},
+
+   	ensureString: function ( buf ) {
+
+   		if ( typeof buf !== "string" ) {
+
+   			var array_buffer = new Uint8Array( buf );
+   			var str = '';
+   			for ( var i = 0; i < buf.byteLength; i ++ ) {
+
+   				str += String.fromCharCode( array_buffer[ i ] ); // implicitly assumes little-endian
+
+   			}
+   			return str;
+
+   		} else {
+
+   			return buf;
+
+   		}
+
+   	},
+
+   	ensureBinary: function ( buf ) {
+
+   		if ( typeof buf === "string" ) {
+
+   			var array_buffer = new Uint8Array( buf.length );
+   			for ( var i = 0; i < buf.length; i ++ ) {
+
+   				array_buffer[ i ] = buf.charCodeAt( i ) & 0xff; // implicitly assumes little-endian
+
+   			}
+   			return array_buffer.buffer || array_buffer;
+
+   		} else {
+
+   			return buf;
+
+   		}
+
+   	}
+
+   };
+
+   if ( typeof DataView === 'undefined' ) {
+
+   	DataView = function( buffer, byteOffset, byteLength ) {
+
+   		this.buffer = buffer;
+   		this.byteOffset = byteOffset || 0;
+   		this.byteLength = byteLength || buffer.byteLength || buffer.length;
+   		this._isString = typeof buffer === "string";
+
+   	};
+
+   	DataView.prototype = {
+
+   		_getCharCodes: function( buffer, start, length ) {
+
+   			start = start || 0;
+   			length = length || buffer.length;
+   			var end = start + length;
+   			var codes = [];
+   			for ( var i = start; i < end; i ++ ) {
+
+   				codes.push( buffer.charCodeAt( i ) & 0xff );
+
+   			}
+   			return codes;
+
+   		},
+
+   		_getBytes: function ( length, byteOffset, littleEndian ) {
+
+   			var result;
+
+   			// Handle the lack of endianness
+   			if ( littleEndian === undefined ) {
+
+   				littleEndian = this._littleEndian;
+
+   			}
+
+   			// Handle the lack of byteOffset
+   			if ( byteOffset === undefined ) {
+
+   				byteOffset = this.byteOffset;
+
+   			} else {
+
+   				byteOffset = this.byteOffset + byteOffset;
+
+   			}
+
+   			if ( length === undefined ) {
+
+   				length = this.byteLength - byteOffset;
+
+   			}
+
+   			// Error Checking
+   			if ( typeof byteOffset !== 'number' ) {
+
+   				throw new TypeError( 'DataView byteOffset is not a number' );
+
+   			}
+
+   			if ( length < 0 || byteOffset + length > this.byteLength ) {
+
+   				throw new Error( 'DataView length or (byteOffset+length) value is out of bounds' );
+
+   			}
+
+   			if ( this.isString ) {
+
+   				result = this._getCharCodes( this.buffer, byteOffset, byteOffset + length );
+
+   			} else {
+
+   				result = this.buffer.slice( byteOffset, byteOffset + length );
+
+   			}
+
+   			if ( ! littleEndian && length > 1 ) {
+
+   				if ( Array.isArray( result ) === false ) {
+
+   					result = Array.prototype.slice.call( result );
+
+   				}
+
+   				result.reverse();
+
+   			}
+
+   			return result;
+
+   		},
+
+   		// Compatibility functions on a String Buffer
+
+   		getFloat64: function ( byteOffset, littleEndian ) {
+
+   			var b = this._getBytes( 8, byteOffset, littleEndian ),
+
+   				sign = 1 - ( 2 * ( b[ 7 ] >> 7 ) ),
+   				exponent = ( ( ( ( b[ 7 ] << 1 ) & 0xff ) << 3 ) | ( b[ 6 ] >> 4 ) ) - ( ( 1 << 10 ) - 1 ),
+
+   			// Binary operators such as | and << operate on 32 bit values, using + and Math.pow(2) instead
+   				mantissa = ( ( b[ 6 ] & 0x0f ) * Math.pow( 2, 48 ) ) + ( b[ 5 ] * Math.pow( 2, 40 ) ) + ( b[ 4 ] * Math.pow( 2, 32 ) ) +
+   							( b[ 3 ] * Math.pow( 2, 24 ) ) + ( b[ 2 ] * Math.pow( 2, 16 ) ) + ( b[ 1 ] * Math.pow( 2, 8 ) ) + b[ 0 ];
+
+   			if ( exponent === 1024 ) {
+
+   				if ( mantissa !== 0 ) {
+
+   					return NaN;
+
+   				} else {
+
+   					return sign * Infinity;
+
+   				}
+
+   			}
+
+   			if ( exponent === - 1023 ) {
+
+   				// Denormalized
+   				return sign * mantissa * Math.pow( 2, - 1022 - 52 );
+
+   			}
+
+   			return sign * ( 1 + mantissa * Math.pow( 2, - 52 ) ) * Math.pow( 2, exponent );
+
+   		},
+
+   		getFloat32: function ( byteOffset, littleEndian ) {
+
+   			var b = this._getBytes( 4, byteOffset, littleEndian ),
+
+   				sign = 1 - ( 2 * ( b[ 3 ] >> 7 ) ),
+   				exponent = ( ( ( b[ 3 ] << 1 ) & 0xff ) | ( b[ 2 ] >> 7 ) ) - 127,
+   				mantissa = ( ( b[ 2 ] & 0x7f ) << 16 ) | ( b[ 1 ] << 8 ) | b[ 0 ];
+
+   			if ( exponent === 128 ) {
+
+   				if ( mantissa !== 0 ) {
+
+   					return NaN;
+
+   				} else {
+
+   					return sign * Infinity;
+
+   				}
+
+   			}
+
+   			if ( exponent === - 127 ) {
+
+   				// Denormalized
+   				return sign * mantissa * Math.pow( 2, - 126 - 23 );
+
+   			}
+
+   			return sign * ( 1 + mantissa * Math.pow( 2, - 23 ) ) * Math.pow( 2, exponent );
+
+   		},
+
+   		getInt32: function ( byteOffset, littleEndian ) {
+
+   			var b = this._getBytes( 4, byteOffset, littleEndian );
+   			return ( b[ 3 ] << 24 ) | ( b[ 2 ] << 16 ) | ( b[ 1 ] << 8 ) | b[ 0 ];
+
+   		},
+
+   		getUint32: function ( byteOffset, littleEndian ) {
+
+   			return this.getInt32( byteOffset, littleEndian ) >>> 0;
+
+   		},
+
+   		getInt16: function ( byteOffset, littleEndian ) {
+
+   			return ( this.getUint16( byteOffset, littleEndian ) << 16 ) >> 16;
+
+   		},
+
+   		getUint16: function ( byteOffset, littleEndian ) {
+
+   			var b = this._getBytes( 2, byteOffset, littleEndian );
+   			return ( b[ 1 ] << 8 ) | b[ 0 ];
+
+   		},
+
+   		getInt8: function ( byteOffset ) {
+
+   			return ( this.getUint8( byteOffset ) << 24 ) >> 24;
+
+   		},
+
+   		getUint8: function ( byteOffset ) {
+
+   			return this._getBytes( 1, byteOffset )[ 0 ];
+
+   		}
+
+   	 };
+
+   }
+
+   return STLLoader
+
+ }
+
+},{}],3:[function(require,module,exports){
+/**
  * @author Eberhard Graether / http://egraether.com/
  * @author Mark Lundin 	/ http://mark-lundin.com
  * @author Simone Manini / http://daron1337.github.io
@@ -2840,7 +3338,7 @@ function preventEvent( event ) { event.preventDefault(); }
 
 TrackballControls.prototype = Object.create( THREE.EventDispatcher.prototype );
 
-},{"three":3}],3:[function(require,module,exports){
+},{"three":4}],4:[function(require,module,exports){
 var self = self || {};// File:src/Three.js
 
 /**
@@ -43410,7 +43908,7 @@ if (typeof exports !== 'undefined') {
   this['THREE'] = THREE;
 }
 
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 var TrackballControls = require('three-trackballcontrols');
 
 function E_Interactor(Mgr, renderer)
@@ -43475,7 +43973,7 @@ E_Interactor.prototype.OnMouseWheel = function()
 
 module.exports = E_Interactor;
 
-},{"three-trackballcontrols":2}],5:[function(require,module,exports){
+},{"three-trackballcontrols":3}],6:[function(require,module,exports){
 var convnetjs = require('convnetjs');
 
 
@@ -43523,7 +44021,11 @@ E_MLManager.prototype.PutVolume = function( volume )
     }
   }
 
-  this.Mgr.SetLog("<b style='color:red'>Input :" + className[volume.class] + "</b><br>");
+  if(volume.class === null){
+    this.Mgr.SetLog("<b style='color:red'> Unknown Input </b><br>");
+  }else{
+    this.Mgr.SetLog("<b style='color:red'>Input :" + className[volume.class] + "</b><br>");
+  }
 
   //Calculate Possibility
   var probability = this.network.forward(convVol);
@@ -43559,24 +44061,28 @@ E_MLManager.prototype.PutVolume = function( volume )
 
 
   //Train Data
-  var trainer = new convnetjs.Trainer(this.network, {learning_rate:0.01, l2_decay:0.001});
-  trainer.train(convVol, volume.class);
+  if(volume.class !== null){
+    var trainer = new convnetjs.Trainer(this.network, {learning_rate:0.01, l2_decay:0.001});
+    trainer.train(convVol, volume.class);
 
-
-  ///Save Network
-  var jsonNetwork = JSON.stringify( this.network.toJSON() );
-  this.Mgr.SocketMgr().EmitData("SAVE_NETWORK", jsonNetwork);
+    ///Save Network
+    var jsonNetwork = JSON.stringify( this.network.toJSON() );
+    this.Mgr.SocketMgr().EmitData("SAVE_NETWORK", jsonNetwork);
+  }
 }
 
 module.exports = E_MLManager;
 
-},{"convnetjs":1}],6:[function(require,module,exports){
+},{"convnetjs":1}],7:[function(require,module,exports){
 var E_SocketManager = require('./E_SocketManager.js');
 var E_MLManager = require('./E_MLManager.js');
 
 //Interactor
 var E_Interactor = require('./E_Interactor.js');
 
+
+//STL Loader
+var STLLoader = require('three-stl-loader')(THREE);
 function E_Manager()
 {
   var m_socketMgr = new E_SocketManager(this);
@@ -43702,7 +44208,6 @@ E_Manager.prototype.GenerateRandomObject = function()
 
 
   if( idx === 0){
-
     geometry = new THREE.BoxGeometry( Math.random()*5, Math.random()*5, Math.random()*5 );
     material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
     mesh = new THREE.Mesh( geometry, material );
@@ -43747,15 +44252,13 @@ E_Manager.prototype.GenerateRandomObject = function()
 
   //Redraw Scene
   this.GenerateVoxelizedObject(mesh);
-
   this.Redraw();
 }
 
 E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
 {
-  //Make 10x10x10 voxel volume data
+  //Make 20x20x20 voxel volume data
   var segments = 20;
-
 
   //right scene
   var orScene = this.renderer[0].scene;
@@ -43765,10 +44268,13 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
   mesh.geometry.computeBoundingSphere();
   var rad = mesh.geometry.boundingSphere.radius;
   var center = mesh.geometry.boundingSphere.center;
+
+  this.renderer[0].control.target = center;
   var voxelSize = (rad * 2) / segments;
 
   /// Visualize Bounding Hexadron
   var geometry = new THREE.SphereGeometry( rad, 32, 32 );
+  geometry.applyMatrix( new THREE.Matrix4().makeTranslation(center.x, center.y, center.z) );
   geometry.computeBoundingBox();
   var material = new THREE.LineBasicMaterial( {color: 0x00ff00} );
   var sphere = new THREE.Mesh( geometry, material );
@@ -43829,16 +44335,12 @@ E_Manager.prototype.GenerateVoxelizedObject = function(mesh)
     }
   }
 
-
-
   //Visualize voxelSpace
   this.VisualizeVoxels(box, voxelSpace, segments, voxelSize, min, scene);
 
 
-
-
-
   this.mlMgr.PutVolume({data:voxelSpace, class:mesh.class});
+
 }
 
 E_Manager.prototype.VisualizeVoxels = function(box, voxelSpace, segments, voxelSize, min, scene)
@@ -43895,8 +44397,9 @@ E_Manager.prototype.Frand = function(min, max)
   return value;
 }
 
-E_Manager.prototype.ClearScene = function()
+E_Manager.prototype.ClearScene = function( generateNext )
 {
+  if(generateNext === undefined) generateNext = true;
 
   var scene0 = this.renderer[0].scene;
   var length0 = scene0.children.length;
@@ -43915,9 +44418,9 @@ E_Manager.prototype.ClearScene = function()
   }
 
   //this.Redraw();
-
-  this.GenerateRandomObject();
-
+  if(generateNext){
+    this.GenerateRandomObject();
+  }
 }
 
 E_Manager.prototype.SetLog = function(text)
@@ -43940,9 +44443,53 @@ E_Manager.prototype.OnRunTrainning = function(value)
   }
 }
 
+E_Manager.prototype.ImportMesh = function(path)
+{
+  var that = this;
+  var scene = this.renderer[0].scene;
+
+  var loader = new THREE.OBJLoader();
+  loader.load( path, function ( object ) {
+    that.ClearScene(false);
+
+    var mesh = object.children[0];
+    mesh.material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
+    mesh.material.color = new THREE.Color(Math.random(), Math.random(), Math.random());
+
+    scene.add( mesh );
+    mesh.class = null;
+    that.GenerateVoxelizedObject(mesh);
+    that.Redraw();
+  } );
+}
+
+E_Manager.prototype.ImportSTL = function(path)
+{
+  var that = this;
+  var scene = this.renderer[0].scene;
+
+
+  var loader = new STLLoader();
+
+  loader.load( path, function(geometry){
+    //clear Scene
+    that.ClearScene(false);
+
+
+    var material = new THREE.MeshPhongMaterial({shading:THREE.SmoothShading, shininess:10, specular:0xaaaaaa, side:THREE.DoubleSide});
+    material.color = new THREE.Color(Math.random(), Math.random(), Math.random());
+    var mesh = new THREE.Mesh(geometry, material);
+
+    scene.add(mesh);
+    mesh.class = null;
+    that.GenerateVoxelizedObject(mesh);
+    that.Redraw();
+  } );
+}
+
 module.exports = E_Manager;
 
-},{"./E_Interactor.js":4,"./E_MLManager.js":5,"./E_SocketManager.js":7}],7:[function(require,module,exports){
+},{"./E_Interactor.js":5,"./E_MLManager.js":6,"./E_SocketManager.js":8,"three-stl-loader":2}],8:[function(require,module,exports){
 function E_SocketManager(Mgr)
 {
   this.Mgr = Mgr;
@@ -43973,7 +44520,7 @@ E_SocketManager.prototype.HandleSignal = function()
       Mgr.ClearScene();
     }
 
-    
+
   })
 
 }
@@ -43985,7 +44532,7 @@ E_SocketManager.prototype.EmitData = function(signal, data)
 
 module.exports = E_SocketManager;
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 var E_Manager = require('./E_Manager.js');
 
 
@@ -44003,7 +44550,9 @@ var l_toolBar = {view:"toolbar",
 
 
                   //Generate Random Object and run classification
-                  {id:"ID_REFRESH", view:"button", value:"Generate Random Polygon", width:250}
+                  {id:"ID_REFRESH", view:"button", value:"Generate Random Polygon", width:250},
+                  {id:"ID_UPLOAD_OBJ", view:"button", value:"Upload OBJ", width:250},
+                  {id:"ID_UPLOAD_STL", view:"button", value:"Upload STL", width:250}
                 ]};
 
 
@@ -44070,4 +44619,47 @@ $$("ID_TOGGLE_TRAINNING").attachEvent("onItemClick", function(id){
   Manager.OnRunTrainning(this.getValue());
 });
 
-},{"./E_Manager.js":6}]},{},[8]);
+
+
+///OBJ
+$$("ID_UPLOAD_OBJ").attachEvent("onItemClick", function(){
+  var parent = this.getNode().childNodes[0];
+
+  //Create File Dialog
+  var fileDialog = document.createElement("input");
+  fileDialog.setAttribute("type", "file");
+  //fileDialog.setAttribute("multiple", true);
+  fileDialog.click();
+  parent.appendChild(fileDialog);
+
+  fileDialog.addEventListener("change", function(ev){
+
+    var path = URL.createObjectURL(ev.target.files[0]);
+    Manager.ImportMesh(path);
+
+  });
+  parent.removeChild(fileDialog);
+});
+
+
+///STL
+$$("ID_UPLOAD_STL").attachEvent("onItemClick", function(){
+  var parent = this.getNode().childNodes[0];
+
+  //Create File Dialog
+  var fileDialog = document.createElement("input");
+  fileDialog.setAttribute("type", "file");
+  //fileDialog.setAttribute("multiple", true);
+  fileDialog.click();
+  parent.appendChild(fileDialog);
+
+  fileDialog.addEventListener("change", function(ev){
+
+    var path = URL.createObjectURL(ev.target.files[0]);
+    Manager.ImportSTL(path);
+
+  });
+  parent.removeChild(fileDialog);
+});
+
+},{"./E_Manager.js":7}]},{},[9]);
